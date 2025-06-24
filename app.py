@@ -29,7 +29,7 @@ def authenticate():
         }
     }
     authenticator = stauth.Authenticate(credentials, "traffic_app", "abcdef", cookie_expiry_days=1)
-    name, authentication_status, username = authenticator.login(form_name="Login", location="main")
+    name, authentication_status = authenticator.login("Login")
     if authentication_status is False:
         st.error("Username/password is incorrect")
         st.stop()
