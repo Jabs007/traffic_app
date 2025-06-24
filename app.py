@@ -6,6 +6,8 @@ from datetime import datetime
 from streamlit_lottie import st_lottie
 import sqlite3
 import requests
+import shap
+import streamlit_authenticator as stauth
 
 st.set_page_config(
     page_title="Smart Traffic Prediction",
@@ -13,6 +15,41 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# --- User Authentication ---
+def authenticate():
+    credentials = {
+        "usernames": {
+            "admin": {
+                "name": "Admin",
+                "password": "admin123"  # In production, use hashed passwords!
+            }
+        }
+    }
+    authenticator = stauth.Authenticate(credentials, "traffic_app", "abcdef", cookie_expiry_days=1)
+    name, authentication_status, username = authenticator.login("Login", "main")
+    if authentication_status is False:
+        st.error("Username/password is incorrect")
+        st.stop()
+    elif authentication_status is None:
+        st.warning("Please enter your username and password")
+        st.stop()
+    return name
+
+# --- Theme Toggle ---
+def theme_toggle():
+    if "theme" not in st.session_state:
+        st.session_state.theme = "light"
+    theme = st.sidebar.radio("Theme", ["light", "dark"], index=0 if st.session_state.theme == "light" else 1)
+    st.session_state.theme = theme
+    st.markdown(
+        f"""
+        <style>
+        body {{ background-color: {"#0e1117" if theme == "dark" else "#fff"}; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 class TrafficPredictorApp:
     def __init__(self):
@@ -41,6 +78,8 @@ class TrafficPredictorApp:
             conn = sqlite3.connect('prediction_history.db')
             c = conn.cursor()
             c.execute('''CREATE TABLE IF NOT EXISTS history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            timestamp TEXT,
                             Vehicle_Count INTEGER,
                             Traffic_Speed_kmh REAL,
                             "Road_Occupancy_%" REAL,
@@ -64,11 +103,12 @@ class TrafficPredictorApp:
             day_str = self.label_encoders['DayOfWeek'].inverse_transform([input_data['DayOfWeek']])[0]
             conn = sqlite3.connect('prediction_history.db')
             c = conn.cursor()
-            c.execute('''INSERT INTO history (Vehicle_Count, Traffic_Speed_kmh, "Road_Occupancy_%", 
+            c.execute('''INSERT INTO history (timestamp, Vehicle_Count, Traffic_Speed_kmh, "Road_Occupancy_%", 
                                               Traffic_Light_State, Weather_Condition, Accident_Report,
                                               Hour, DayOfWeek, Prediction)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (input_data['Vehicle_Count'],
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                       input_data['Vehicle_Count'],
                        input_data['Traffic_Speed_kmh'],
                        input_data['Road_Occupancy_%'],
                        traffic_light_str,
@@ -85,10 +125,10 @@ class TrafficPredictorApp:
         finally:
             conn.close()
 
-    def load_history_from_db(self):
+    def load_history_from_db(self, limit=10):
         try:
             conn = sqlite3.connect('prediction_history.db')
-            df = pd.read_sql_query("SELECT * FROM history", conn)
+            df = pd.read_sql_query(f"SELECT * FROM history ORDER BY id DESC LIMIT {limit}", conn)
             conn.close()
             return df
         except sqlite3.Error as e:
@@ -113,6 +153,12 @@ class TrafficPredictorApp:
             Welcome to the interactive dashboard for traffic prediction using smart mobility data.  
             Navigate using the sidebar to explore insights or predict traffic conditions.
         """)
+        st.markdown("### 🕒 Recent Predictions")
+        history_df = self.load_history_from_db(limit=5)
+        if not history_df.empty:
+            st.dataframe(history_df.drop(columns=["id"]), use_container_width=True)
+        else:
+            st.info("No recent predictions found.")
 
     def display_traffic_prediction(self):
         st.title("🧠 Predict Traffic Condition")
@@ -172,6 +218,15 @@ class TrafficPredictorApp:
             prediction_label = self.label_encoders['Traffic_Condition'].inverse_transform([prediction])[0]
             st.success(f"🚦 Predicted Traffic Condition: **{prediction_label}**")
             self.save_to_db(input_dict, prediction_label)
+
+            # SHAP Explainability
+            st.markdown("#### 🔍 Model Explanation (SHAP)")
+            explainer = shap.TreeExplainer(self.model)
+            shap_values = explainer.shap_values(input_df)
+            st.set_option('deprecation.showPyplotGlobalUse', False)
+            shap.initjs()
+            st.pyplot(shap.force_plot(explainer.expected_value[0], shap_values[0][0], input_df.iloc[0], matplotlib=True, show=False))
+
         except KeyError:
             st.error("Prediction Error: Missing expected data for prediction. Check your inputs.")
             return
@@ -242,7 +297,7 @@ class TrafficPredictorApp:
             fig_hour = px.line(hour_df, x='Hour', y='Count', markers=True,
                                title="Traffic Volume by Hour",
                                labels={"Count": "Traffic Count", "Hour": "Hour of the Day"},
-                               template="plotly_dark",
+                               template="plotly_dark" if st.session_state.theme == "dark" else "plotly_white",
                                line_shape='spline')
             fig_hour.update_traces(line=dict(color='royalblue'))
             fig_hour.update_layout(hovermode="x unified")
@@ -253,7 +308,8 @@ class TrafficPredictorApp:
             fig_day = px.bar(day_df, x='DayOfWeek', y='Count', color='DayOfWeek',
                              title="Traffic Volume by Day",
                              color_continuous_scale="Viridis",
-                             labels={"DayOfWeek": "Day of the Week", "Count": "Traffic Count"})
+                             labels={"DayOfWeek": "Day of the Week", "Count": "Traffic Count"},
+                             template="plotly_dark" if st.session_state.theme == "dark" else "plotly_white")
             fig_day.update_layout(hovermode="x unified", showlegend=False)
             st.plotly_chart(fig_day, use_container_width=True)
 
@@ -277,7 +333,7 @@ class TrafficPredictorApp:
                                 color="Traffic_Condition",
                                 title="Average Speed by Traffic Condition",
                                 labels={"Traffic_Speed_kmh": "Avg Speed (km/h)"},
-                                template="plotly_dark",
+                                template="plotly_dark" if st.session_state.theme == "dark" else "plotly_white",
                                 text_auto='.2f')
             fig_avg_speed.update_layout(showlegend=False)
             st.plotly_chart(fig_avg_speed, use_container_width=True)
@@ -295,12 +351,14 @@ class TrafficPredictorApp:
             - Real-time data collection and logging
             - Interactive EDA Dashboard with key metrics and visualizations
             - Historical data and traffic prediction logging
+            - Model explainability with SHAP
 
             ### Developed By:
             - Analytics Nexus
             - Traffic Data Science Team
         """)
         st.image("https://via.placeholder.com/400x200.png?text=Traffic+Prediction+App", caption="Traffic Prediction")
+        st.markdown("[📄 Documentation](https://github.com/your-repo/traffic-prediction-docs)")
 
 def sidebar_logo():
     st.sidebar.image("https://cdn-icons-png.flaticon.com/512/854/854878.png", width=80)
@@ -316,6 +374,8 @@ def footer():
 
 if __name__ == "__main__":
     sidebar_logo()
+    theme_toggle()
+    authenticate()
     app = TrafficPredictorApp()
 
     st.sidebar.title("Navigation")
