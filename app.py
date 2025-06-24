@@ -36,7 +36,7 @@ def authenticate():
         "abcdef",
         cookie_expiry_days=1
     )
-    name, authentication_status, _ = authenticator.login("Login", "main")
+    name, authentication_status, _ = authenticator.login("Login", location="main")
     if authentication_status is False:
         st.error("Username/password is incorrect")
         st.stop()
