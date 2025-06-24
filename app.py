@@ -9,7 +9,7 @@ import requests
 import shap
 import streamlit_authenticator as stauth
 from passlib.hash import sha256_crypt
-
+# Set Streamlit page configuration at the very top
 st.set_page_config(
     page_title="Smart Traffic Prediction",
     page_icon="🚦",
@@ -19,17 +19,24 @@ st.set_page_config(
 
 # --- User Authentication ---
 def authenticate():
-    # Password is hashed for better security
+    # Store hashed password only once to avoid re-hashing on every rerun
+    if "hashed_password" not in st.session_state:
+        st.session_state["hashed_password"] = sha256_crypt.hash("admin123")
     credentials = {
         "usernames": {
             "admin": {
                 "name": "Admin",
-                "password": sha256_crypt.hash("admin123")
+                "password": st.session_state["hashed_password"]
             }
         }
     }
-    authenticator = stauth.Authenticate(credentials, "traffic_app", "abcdef", cookie_expiry_days=1)
-    name, authentication_status = authenticator.login(form_name="Login", location="main")
+    authenticator = stauth.Authenticate(
+        credentials,
+        "traffic_app",
+        "abcdef",
+        cookie_expiry_days=1
+    )
+    name, authentication_status, _ = authenticator.login("Login", "main")
     if authentication_status is False:
         st.error("Username/password is incorrect")
         st.stop()
@@ -42,17 +49,23 @@ def authenticate():
 # --- Theme Toggle ---
 def theme_toggle():
     st.sidebar.markdown("### 🌓 Theme")
-    theme = st.sidebar.selectbox("Choose Theme", ["Light", "Dark"], index=0)
+    if "theme" not in st.session_state:
+        st.session_state.theme = "light"
+    theme = st.sidebar.selectbox("Choose Theme", ["Light", "Dark"], index=0 if st.session_state.theme == "light" else 1)
     st.session_state.theme = theme.lower()
+    # Streamlit does not support full theme switching via CSS, but we can set a background color for some effect
     st.markdown(
         f"""
         <style>
-        body {{ background-color: {"#0e1117" if theme == "Dark" else "#fff"}; }}
+        .stApp {{
+            background-color: {"#0e1117" if st.session_state.theme == "dark" else "#ffffff"};
+        }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+# --- Main App Class and UI Logic ---
 class TrafficPredictorApp:
     def __init__(self):
         self.model = None
@@ -269,7 +282,7 @@ class TrafficPredictorApp:
         with st.sidebar:
             st.subheader("📋 Filter Data")
             if not self.df.empty and 'Date' in self.df.columns:
-                date_range = st.date_input("Date Range", [self.df['Date'].min(), self.df['Date'].max()])
+                date_range = st.date_input("Date Range", [pd.to_datetime(self.df['Date']).min(), pd.to_datetime(self.df['Date']).max()])
             else:
                 date_range = None
             hour_range = st.slider("Hour Range", 0, 23, (0, 23))
