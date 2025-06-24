@@ -10,7 +10,7 @@ import shap
 import streamlit_authenticator as stauth
 from passlib.hash import sha256_crypt
 
-# Set Streamlit page configuration at the very top
+# Set Streamlit page configuration
 st.set_page_config(
     page_title="Smart Traffic Prediction",
     page_icon="🚦",
@@ -20,7 +20,6 @@ st.set_page_config(
 
 # --- User Authentication ---
 def authenticate():
-    # Store hashed password only once to avoid re-hashing on every rerun
     if "hashed_password" not in st.session_state:
         st.session_state["hashed_password"] = sha256_crypt.hash("admin123")
     credentials = {
@@ -37,12 +36,9 @@ def authenticate():
         "abcdef",
         cookie_expiry_days=1
     )
-    name, authentication_status, _ = authenticator.login("Login", location="main")  # Added location parameter
-    if authentication_status is False:
-        st.error("Username/password is incorrect")
-        st.stop()
-    elif authentication_status is None:
-        st.warning("Please enter your username and password")
+    name, authentication_status, _ = authenticator.login("Login", location="main")
+    if not authentication_status:
+        st.error("Username/password is incorrect" if authentication_status is False else "Please enter your username and password")
         st.stop()
     st.session_state["user"] = name
     return name
