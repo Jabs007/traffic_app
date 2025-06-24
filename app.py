@@ -37,7 +37,7 @@ def authenticate():
         "abcdef",
         cookie_expiry_days=1
     )
-    name, authentication_status, _ = authenticator.login("Login")  # Removed location parameter
+    name, authentication_status, _ = authenticator.login("Login", location="main")  # Added location parameter
     if authentication_status is False:
         st.error("Username/password is incorrect")
         st.stop()
@@ -413,4 +413,6 @@ if __name__ == "__main__":
         app.display_eda_dashboard()
     elif "About" in page:
         app.display_about_page()
+
     footer()
+st.write("This is the end of the app")
