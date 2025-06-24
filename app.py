@@ -9,6 +9,7 @@ import requests
 import shap
 import streamlit_authenticator as stauth
 from passlib.hash import sha256_crypt
+
 # Set Streamlit page configuration at the very top
 st.set_page_config(
     page_title="Smart Traffic Prediction",
@@ -36,7 +37,7 @@ def authenticate():
         "abcdef",
         cookie_expiry_days=1
     )
-    name, authentication_status, _ = authenticator.login("Login", location="main")
+    name, authentication_status, _ = authenticator.login("Login")  # Removed location parameter
     if authentication_status is False:
         st.error("Username/password is incorrect")
         st.stop()
@@ -53,7 +54,6 @@ def theme_toggle():
         st.session_state.theme = "light"
     theme = st.sidebar.selectbox("Choose Theme", ["Light", "Dark"], index=0 if st.session_state.theme == "light" else 1)
     st.session_state.theme = theme.lower()
-    # Streamlit does not support full theme switching via CSS, but we can set a background color for some effect
     st.markdown(
         f"""
         <style>
@@ -413,5 +413,4 @@ if __name__ == "__main__":
         app.display_eda_dashboard()
     elif "About" in page:
         app.display_about_page()
-
     footer()
