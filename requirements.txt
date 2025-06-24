@@ -1,8 +1,9 @@
 streamlit
 pandas
-plotly
-requests
 joblib
-shap
+plotly
 streamlit-lottie
+requests
+shap
 streamlit-authenticator
+passlib
