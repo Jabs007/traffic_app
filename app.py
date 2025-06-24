@@ -8,6 +8,7 @@ import sqlite3
 import requests
 import shap
 import streamlit_authenticator as stauth
+from passlib.hash import sha256_crypt
 
 st.set_page_config(
     page_title="Smart Traffic Prediction",
@@ -18,11 +19,12 @@ st.set_page_config(
 
 # --- User Authentication ---
 def authenticate():
+    # Password is hashed for better security
     credentials = {
         "usernames": {
             "admin": {
                 "name": "Admin",
-                "password": "admin123"  # In production, use hashed passwords!
+                "password": sha256_crypt.hash("admin123")
             }
         }
     }
@@ -34,18 +36,18 @@ def authenticate():
     elif authentication_status is None:
         st.warning("Please enter your username and password")
         st.stop()
+    st.session_state["user"] = name
     return name
 
 # --- Theme Toggle ---
 def theme_toggle():
-    if "theme" not in st.session_state:
-        st.session_state.theme = "light"
-    theme = st.sidebar.radio("Theme", ["light", "dark"], index=0 if st.session_state.theme == "light" else 1)
-    st.session_state.theme = theme
+    st.sidebar.markdown("### 🌓 Theme")
+    theme = st.sidebar.selectbox("Choose Theme", ["Light", "Dark"], index=0)
+    st.session_state.theme = theme.lower()
     st.markdown(
         f"""
         <style>
-        body {{ background-color: {"#0e1117" if theme == "dark" else "#fff"}; }}
+        body {{ background-color: {"#0e1117" if theme == "Dark" else "#fff"}; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -66,7 +68,7 @@ class TrafficPredictorApp:
             self.label_encoders = joblib.load('label_encoders.pkl')
             self.feature_columns = joblib.load('feature_columns.pkl')
             self.df = pd.read_csv('mobility_with_new_features.csv')
-        except (FileNotFoundError, ValueError) as e:
+        except Exception as e:
             st.error(f"Data loading error: {e}")
             self.model = None
             self.label_encoders = None
@@ -379,15 +381,24 @@ if __name__ == "__main__":
     app = TrafficPredictorApp()
 
     st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to", ["Home", "Traffic Prediction", "EDA Dashboard", "About"])
+    page = st.sidebar.radio(
+        "Go to",
+        [
+            "🏠 Home",
+            "🧠 Traffic Prediction",
+            "📊 EDA Dashboard",
+            "ℹ️ About"
+        ],
+        format_func=lambda x: x.split(" ", 1)[-1]
+    )
 
-    if page == "Home":
+    if "Home" in page:
         app.display_home_page()
-    elif page == "Traffic Prediction":
+    elif "Traffic Prediction" in page:
         app.display_traffic_prediction()
-    elif page == "EDA Dashboard":
+    elif "EDA Dashboard" in page:
         app.display_eda_dashboard()
-    elif page == "About":
+    elif "About" in page:
         app.display_about_page()
 
     footer()
